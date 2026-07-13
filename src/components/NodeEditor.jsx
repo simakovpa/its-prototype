@@ -107,12 +107,39 @@ function CategoricalMapEditor({ map, onChange }) {
   )
 }
 
-export default function NodeEditor({ node, onChange }) {
+export default function NodeEditor({ node, onChange, methodologies = [] }) {
   if (!node) {
     return <Empty description="Выберите узел дерева слева" style={{ marginTop: 60 }} />
   }
 
   const patch = (p) => onChange({ ...node, ...p })
+
+  if (node.kind === 'dynamicGroup') {
+    const linked = methodologies.find((m) => m.id === node.linkedMethodologyId)
+    return (
+      <div>
+        <Title level={5} style={{ marginTop: 0 }}>
+          {node.name} <Tag color="purple">Динамическая группа оборудования</Tag>
+        </Title>
+        <Text type="secondary">
+          Связана с методикой: <Text strong>{linked ? linked.name : '(не найдена)'}</Text>
+          {linked && ` — тип актива «${linked.assetType}»`}. Состав группы и ИТС каждого экземпляра
+          определяются на расчёте автоматически, редактировать здесь нечего — при необходимости
+          измените саму связанную методику.
+        </Text>
+        <Form layout="vertical" style={{ marginTop: 16 }}>
+          <Space size="large">
+            <Form.Item label="Вес (в рамках родителя)">
+              <InputNumber min={0} max={1} step={0.05} value={node.weight} onChange={(v) => patch({ weight: v })} />
+            </Form.Item>
+            <Form.Item label="Необязательное звено (при наличии)">
+              <Switch checked={!!node.optional} onChange={(v) => patch({ optional: v })} />
+            </Form.Item>
+          </Space>
+        </Form>
+      </div>
+    )
+  }
 
   return (
     <div>

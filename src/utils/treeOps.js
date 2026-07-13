@@ -38,6 +38,32 @@ export function addChildTo(root, parentId, newNode) {
   return { ...root, children: root.children.map((c) => addChildTo(c, parentId, newNode)) }
 }
 
+export function cloneSubtree(node) {
+  const cloned = {
+    ...node,
+    id: nextId(node.kind === 'leaf' ? 'leaf' : node.kind === 'dynamicGroup' ? 'dyngroup' : 'container'),
+  }
+  if (node.children) {
+    cloned.children = node.children.map(cloneSubtree)
+  }
+  return cloned
+}
+
+export function newRootTemplate(name) {
+  return {
+    id: nextId('root'),
+    name: name || 'Новая методика',
+    kind: 'container',
+    strategy: 'WEIGHTED_SUM',
+    weight: 1,
+    critical: false,
+    resourceDefining: false,
+    materialization: { type: 'virtual' },
+    correctionRules: [],
+    children: [],
+  }
+}
+
 export function newContainerNode(name) {
   return {
     id: nextId('container'),
@@ -50,6 +76,18 @@ export function newContainerNode(name) {
     materialization: { type: 'virtual' },
     correctionRules: [],
     children: [],
+  }
+}
+
+export function newDynamicGroupNode(linkedMethodology) {
+  return {
+    id: nextId('dyngroup'),
+    name: linkedMethodology.name,
+    kind: 'dynamicGroup',
+    linkedMethodologyId: linkedMethodology.id,
+    strategy: 'WEIGHTED_BY_ATTRIBUTE',
+    weight: 1,
+    optional: true,
   }
 }
 

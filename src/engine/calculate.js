@@ -172,12 +172,30 @@ export function calculateEquipmentIts(template, tmcId) {
 
 // Расчёт ИТС Объекта: динамически находит оборудование заданного типа среди
 // ТМЦ, привязанных к ТМ этого объекта, считает их индивидуальный ИТС по
-// соответствующей методике оборудования, дальше сворачивает тем же движком.
-export function calculateObjectIts(objectTemplate, objectId, tmsOfObject, equipmentTemplatesByType) {
+// связанной методике оборудования (реестр methodologies), дальше сворачивает
+// тем же движком.
+export function calculateObjectIts(objectTemplate, objectId, tmsOfObject, methodologies) {
+  function resolveLinked(node) {
+    return methodologies.find((m) => m.id === node.linkedMethodologyId) || null
+  }
+
   function evalObjectNode(node) {
     if (node.kind === 'dynamicGroup') {
+      const linked = resolveLinked(node)
+      if (!linked) {
+        return {
+          id: node.id,
+          name: node.name,
+          kind: 'container',
+          status: 'undetermined',
+          score: null,
+          weight: node.weight,
+          note: 'Связанная методика не найдена (возможно, была удалена)',
+          children: [],
+        }
+      }
       const matchingTmcs = tmcs.filter(
-        (t) => tmsOfObject.includes(t.tmId) && t.tmcType === node.assetType
+        (t) => tmsOfObject.includes(t.tmId) && t.tmcType === linked.assetType
       )
       if (matchingTmcs.length === 0) {
         return {
@@ -187,13 +205,12 @@ export function calculateObjectIts(objectTemplate, objectId, tmsOfObject, equipm
           status: node.optional ? 'excluded' : 'undetermined',
           score: null,
           weight: node.weight,
-          note: `Оборудование типа «${node.assetType}» на объекте не найдено`,
+          note: `Оборудование типа «${linked.assetType}» (методика «${linked.name}») на объекте не найдено`,
           children: [],
         }
       }
       const equipmentResults = matchingTmcs.map((t) => {
-        const equipmentTemplate = equipmentTemplatesByType[t.tmcType]
-        const result = calculateEquipmentIts(equipmentTemplate, t.id)
+        const result = calculateEquipmentIts(linked.template, t.id)
         return {
           ...result,
           name: `${node.name}: ${t.name}`,

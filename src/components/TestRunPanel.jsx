@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 import { Card, Select, Button, Space, Divider, Typography, Tag, Table, Empty, Alert } from 'antd'
 import { PlayCircleOutlined, CheckCircleOutlined } from '@ant-design/icons'
 import { calculateEquipmentIts, calculateObjectIts } from '../engine/calculate.js'
@@ -8,20 +8,35 @@ import { objects, tms, tmcs } from '../data/mockAssets.js'
 
 const { Text, Title } = Typography
 
-export default function TestRunPanel({ transformerTemplate, objectTemplate }) {
-  const equipmentOptions = tmcs
-    .filter((t) => t.tmcType === 'transformer')
-    .map((t) => ({ value: t.id, label: t.name }))
+export default function TestRunPanel({ methodologies }) {
+  const equipmentMethodologies = methodologies.filter((m) => m.level === 'equipment')
+  const objectMethodologies = methodologies.filter((m) => m.level === 'object')
+
+  const [selectedMethodologyId, setSelectedMethodologyId] = useState(equipmentMethodologies[0]?.id)
+  const selectedMethodology = methodologies.find((m) => m.id === selectedMethodologyId)
+
+  const equipmentOptions = useMemo(() => {
+    if (!selectedMethodology) return []
+    return tmcs
+      .filter((t) => t.tmcType === selectedMethodology.assetType)
+      .map((t) => ({ value: t.id, label: t.name }))
+  }, [selectedMethodology])
 
   const [selectedEquipment, setSelectedEquipment] = useState(equipmentOptions[0]?.value)
+  useEffect(() => {
+    setSelectedEquipment(equipmentOptions[0]?.value)
+  }, [selectedMethodologyId])
+
   const [lastResult, setLastResult] = useState(null)
   const [lastIsTrial, setLastIsTrial] = useState(true)
   const [history, setHistory] = useState([])
 
+  const [selectedObjectMethodologyId, setSelectedObjectMethodologyId] = useState(objectMethodologies[0]?.id)
   const [objectResult, setObjectResult] = useState(null)
 
   const runEquipment = (trial) => {
-    const result = calculateEquipmentIts(transformerTemplate, selectedEquipment)
+    if (!selectedMethodology || !selectedEquipment) return
+    const result = calculateEquipmentIts(selectedMethodology.template, selectedEquipment)
     setLastResult(result)
     setLastIsTrial(trial)
     if (!trial) {
@@ -29,6 +44,7 @@ export default function TestRunPanel({ transformerTemplate, objectTemplate }) {
       setHistory((h) => [
         {
           date: new Date().toLocaleString('ru-RU'),
+          methodology: selectedMethodology.name,
           equipment: equipmentOptions.find((e) => e.value === selectedEquipment)?.label,
           score: result.score,
           category: cat.label,
@@ -40,9 +56,11 @@ export default function TestRunPanel({ transformerTemplate, objectTemplate }) {
   }
 
   const runObject = () => {
+    const objectMethodology = objectMethodologies.find((m) => m.id === selectedObjectMethodologyId)
+    if (!objectMethodology) return
     const obj = objects[0]
     const tmsOfObject = tms.filter((t) => t.objectId === obj.id).map((t) => t.id)
-    const result = calculateObjectIts(objectTemplate, obj.id, tmsOfObject, { transformer: transformerTemplate })
+    const result = calculateObjectIts(objectMethodology.template, obj.id, tmsOfObject, methodologies)
     setObjectResult(result)
   }
 
@@ -54,14 +72,23 @@ export default function TestRunPanel({ transformerTemplate, objectTemplate }) {
         <Space wrap>
           <Select
             style={{ width: 320 }}
+            placeholder="Методика оборудования"
+            options={equipmentMethodologies.map((m) => ({ value: m.id, label: m.name }))}
+            value={selectedMethodologyId}
+            onChange={setSelectedMethodologyId}
+          />
+          <Select
+            style={{ width: 320 }}
+            placeholder="Единица оборудования"
             options={equipmentOptions}
             value={selectedEquipment}
             onChange={setSelectedEquipment}
+            notFoundContent="Нет активов такого типа в моковых данных"
           />
-          <Button icon={<PlayCircleOutlined />} onClick={() => runEquipment(true)}>
+          <Button icon={<PlayCircleOutlined />} disabled={!selectedEquipment} onClick={() => runEquipment(true)}>
             Пробный расчёт
           </Button>
-          <Button type="primary" icon={<CheckCircleOutlined />} onClick={() => runEquipment(false)}>
+          <Button type="primary" icon={<CheckCircleOutlined />} disabled={!selectedEquipment} onClick={() => runEquipment(false)}>
             Официальный расчёт
           </Button>
         </Space>
@@ -100,6 +127,7 @@ export default function TestRunPanel({ transformerTemplate, objectTemplate }) {
             dataSource={history.map((h, i) => ({ ...h, key: i }))}
             columns={[
               { title: 'Дата расчёта', dataIndex: 'date' },
+              { title: 'Методика', dataIndex: 'methodology' },
               { title: 'Оборудование', dataIndex: 'equipment' },
               { title: 'ИТС', dataIndex: 'score', render: (v) => v.toFixed(1) },
               {
@@ -115,8 +143,15 @@ export default function TestRunPanel({ transformerTemplate, objectTemplate }) {
       <Card size="small" title="Расчёт по объекту (технологическая цепочка)">
         <Space direction="vertical" style={{ width: '100%' }}>
           <Space>
+            <Select
+              style={{ width: 320 }}
+              placeholder="Методика объекта"
+              options={objectMethodologies.map((m) => ({ value: m.id, label: m.name }))}
+              value={selectedObjectMethodologyId}
+              onChange={setSelectedObjectMethodologyId}
+            />
             <Text>Объект: {objects[0].name}</Text>
-            <Button icon={<PlayCircleOutlined />} onClick={runObject}>
+            <Button icon={<PlayCircleOutlined />} disabled={!selectedObjectMethodologyId} onClick={runObject}>
               Рассчитать ИТС объекта
             </Button>
           </Space>

@@ -261,7 +261,7 @@ export const objectMethodologyTemplate = {
       id: 'chain-transformers',
       name: 'Силовые трансформаторы',
       kind: 'dynamicGroup',
-      assetType: 'transformer',
+      linkedMethodologyId: 'meth-transformer',
       strategy: 'WEIGHTED_BY_ATTRIBUTE',
       weight: 1,
       optional: false,
@@ -269,6 +269,28 @@ export const objectMethodologyTemplate = {
   ],
 }
 
-export const equipmentTemplatesByType = {
-  transformer: transformerMethodologyTemplate,
-}
+// Реестр методик — то, чем пользователь управляет через кнопку «Добавить методику».
+// Каждая запись знает, на каком уровне дерева активов и к какому типу актива она
+// применяется — это и используется при построении динамических групп на уровне объекта.
+export const initialMethodologies = [
+  {
+    id: 'meth-transformer',
+    name: 'Силовой трансформатор',
+    level: 'equipment',
+    assetType: 'transformer',
+    template: transformerMethodologyTemplate,
+  },
+  {
+    id: 'meth-ps',
+    name: 'Подстанция (технологическая цепочка)',
+    level: 'object',
+    assetType: 'ps',
+    template: objectMethodologyTemplate,
+  },
+]
+
+export const levelOptions = [
+  { value: 'equipment', label: 'Оборудование (тип ТМЦ)' },
+  { value: 'tm', label: 'Техническое место (тип ТМ)' },
+  { value: 'object', label: 'Объект (тип объекта)' },
+]

@@ -1,19 +1,42 @@
 import React, { useState } from 'react'
-import { Layout, Typography, Tabs, Select, Space, Tag } from 'antd'
+import { Layout, Typography, Tabs, Select, Space, Tag, Button, Modal, Form, Input } from 'antd'
+import { PlusOutlined } from '@ant-design/icons'
 import MethodologyEditor from './components/MethodologyEditor.jsx'
 import TestRunPanel from './components/TestRunPanel.jsx'
-import { transformerMethodologyTemplate, objectMethodologyTemplate } from './data/methodologyTemplates.js'
+import { initialMethodologies, levelOptions } from './data/methodologyTemplates.js'
+import { newRootTemplate, nextId } from './utils/treeOps.js'
 
 const { Header, Content } = Layout
 const { Title, Text } = Typography
 
 export default function App() {
-  const [transformerTemplate, setTransformerTemplate] = useState(transformerMethodologyTemplate)
-  const [objectTemplate, setObjectTemplate] = useState(objectMethodologyTemplate)
-  const [editingWhich, setEditingWhich] = useState('transformer')
+  const [methodologies, setMethodologies] = useState(initialMethodologies)
+  const [editingId, setEditingId] = useState(initialMethodologies[0].id)
+  const [newMethodModalOpen, setNewMethodModalOpen] = useState(false)
+  const [form] = Form.useForm()
 
-  const activeTemplate = editingWhich === 'transformer' ? transformerTemplate : objectTemplate
-  const setActiveTemplate = editingWhich === 'transformer' ? setTransformerTemplate : setObjectTemplate
+  const activeMethodology = methodologies.find((m) => m.id === editingId)
+
+  const updateActiveTemplate = (nextTemplate) => {
+    setMethodologies((list) => list.map((m) => (m.id === editingId ? { ...m, template: nextTemplate } : m)))
+  }
+
+  const handleCreateMethodology = () => {
+    form.validateFields().then((values) => {
+      const id = nextId('meth')
+      const newMethodology = {
+        id,
+        name: values.name,
+        level: values.level,
+        assetType: values.assetType,
+        template: newRootTemplate(values.name),
+      }
+      setMethodologies((list) => [...list, newMethodology])
+      setEditingId(id)
+      setNewMethodModalOpen(false)
+      form.resetFields()
+    })
+  }
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -35,27 +58,62 @@ export default function App() {
                   <Space>
                     <Text>Редактируемая методика:</Text>
                     <Select
-                      style={{ width: 320 }}
-                      value={editingWhich}
-                      onChange={setEditingWhich}
-                      options={[
-                        { value: 'transformer', label: 'Оборудование: Силовой трансформатор' },
-                        { value: 'object', label: 'Объект: Подстанция (технологическая цепочка)' },
-                      ]}
+                      style={{ width: 380 }}
+                      value={editingId}
+                      onChange={setEditingId}
+                      options={methodologies.map((m) => ({
+                        value: m.id,
+                        label: `${m.name} — ${levelOptions.find((l) => l.value === m.level)?.label || m.level}`,
+                      }))}
                     />
+                    <Button icon={<PlusOutlined />} onClick={() => setNewMethodModalOpen(true)}>
+                      Добавить методику
+                    </Button>
                   </Space>
-                  <MethodologyEditor template={activeTemplate} onChange={setActiveTemplate} />
+                  {activeMethodology && (
+                    <MethodologyEditor
+                      template={activeMethodology.template}
+                      onChange={updateActiveTemplate}
+                      methodologies={methodologies}
+                      currentMethodologyId={editingId}
+                    />
+                  )}
                 </Space>
               ),
             },
             {
               key: 'testrun',
               label: 'Тестовый / официальный расчёт',
-              children: <TestRunPanel transformerTemplate={transformerTemplate} objectTemplate={objectTemplate} />,
+              children: <TestRunPanel methodologies={methodologies} />,
             },
           ]}
         />
       </Content>
+
+      <Modal
+        title="Новая методика расчёта ИТС"
+        open={newMethodModalOpen}
+        onCancel={() => setNewMethodModalOpen(false)}
+        onOk={handleCreateMethodology}
+        okText="Создать"
+      >
+        <Form form={form} layout="vertical">
+          <Form.Item name="name" label="Наименование" rules={[{ required: true, message: 'Укажите наименование' }]}>
+            <Input placeholder="Например, Выключатель 110 кВ" />
+          </Form.Item>
+          <Form.Item name="level" label="Уровень применения" rules={[{ required: true }]} initialValue="equipment">
+            <Select options={levelOptions} />
+          </Form.Item>
+          <Form.Item
+            name="assetType"
+            label="Тип актива (код)"
+            rules={[{ required: true, message: 'Укажите код типа актива' }]}
+            extra="Например: transformer, breaker, ps, tp, vl — код типа ТМЦ/ТМ/объекта, к которому применяется методика"
+          >
+            <Input placeholder="breaker" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </Layout>
   )
 }
