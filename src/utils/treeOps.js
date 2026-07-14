@@ -49,6 +49,10 @@ export function cloneSubtree(node) {
   return cloned
 }
 
+export function cloneScale(scale) {
+  return JSON.parse(JSON.stringify(scale))
+}
+
 export function newRootTemplate(name) {
   return {
     id: nextId('root'),

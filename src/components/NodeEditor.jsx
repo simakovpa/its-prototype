@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
   Form,
   Input,
@@ -22,6 +22,7 @@ import {
   scaleKindOptions,
 } from '../data/catalog.js'
 import { measuredParams, defectTypes } from '../data/dictionaries.js'
+import { cloneScale } from '../utils/treeOps.js'
 
 const { Text, Title } = Typography
 
@@ -107,12 +108,13 @@ function CategoricalMapEditor({ map, onChange }) {
   )
 }
 
-export default function NodeEditor({ node, onChange, methodologies = [] }) {
+export default function NodeEditor({ node, onChange, methodologies = [], library, onSaveScaleToLibrary }) {
   if (!node) {
     return <Empty description="Выберите узел дерева слева" style={{ marginTop: 60 }} />
   }
 
   const patch = (p) => onChange({ ...node, ...p })
+  const [scaleLibName, setScaleLibName] = useState('')
 
   if (node.kind === 'dynamicGroup') {
     const linked = methodologies.find((m) => m.id === node.linkedMethodologyId)
@@ -355,6 +357,20 @@ export default function NodeEditor({ node, onChange, methodologies = [] }) {
             <Divider orientation="left" plain>
               Шкала оценки
             </Divider>
+            {library?.scales?.length > 0 && (
+              <Form.Item label="Загрузить из библиотеки">
+                <Select
+                  style={{ width: 420 }}
+                  placeholder="Выбрать готовую шкалу…"
+                  options={library.scales.map((s) => ({ value: s.id, label: s.name }))}
+                  value={undefined}
+                  onChange={(id) => {
+                    const found = library.scales.find((s) => s.id === id)
+                    if (found) patch({ scale: cloneScale(found.scale) })
+                  }}
+                />
+              </Form.Item>
+            )}
             <Form.Item label="Тип шкалы">
               <Select
                 style={{ width: 420 }}
@@ -371,6 +387,27 @@ export default function NodeEditor({ node, onChange, methodologies = [] }) {
               <NumericZonesEditor zones={node.scale.zones || []} onChange={(zones) => patch({ scale: { ...node.scale, zones } })} />
             ) : (
               <CategoricalMapEditor map={node.scale?.map || []} onChange={(map) => patch({ scale: { ...node.scale, map } })} />
+            )}
+            {onSaveScaleToLibrary && (
+              <Space style={{ marginTop: 12 }}>
+                <Input
+                  size="small"
+                  placeholder="Название для библиотеки"
+                  value={scaleLibName}
+                  onChange={(e) => setScaleLibName(e.target.value)}
+                  style={{ width: 260 }}
+                />
+                <Button
+                  size="small"
+                  disabled={!scaleLibName.trim()}
+                  onClick={() => {
+                    onSaveScaleToLibrary(node.scale, scaleLibName.trim())
+                    setScaleLibName('')
+                  }}
+                >
+                  Сохранить шкалу в библиотеку
+                </Button>
+              </Space>
             )}
           </>
         )}

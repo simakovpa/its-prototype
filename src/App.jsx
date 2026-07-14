@@ -3,8 +3,9 @@ import { Layout, Typography, Tabs, Select, Space, Tag, Button, Modal, Form, Inpu
 import { PlusOutlined } from '@ant-design/icons'
 import MethodologyEditor from './components/MethodologyEditor.jsx'
 import TestRunPanel from './components/TestRunPanel.jsx'
+import LibraryPanel from './components/LibraryPanel.jsx'
 import { initialMethodologies, levelOptions } from './data/methodologyTemplates.js'
-import { newRootTemplate, nextId } from './utils/treeOps.js'
+import { newRootTemplate, nextId, cloneSubtree, cloneScale } from './utils/treeOps.js'
 
 const { Header, Content } = Layout
 const { Title, Text } = Typography
@@ -14,6 +15,8 @@ export default function App() {
   const [editingId, setEditingId] = useState(initialMethodologies[0].id)
   const [newMethodModalOpen, setNewMethodModalOpen] = useState(false)
   const [form] = Form.useForm()
+
+  const [library, setLibrary] = useState({ nodes: [], scales: [] })
 
   const activeMethodology = methodologies.find((m) => m.id === editingId)
 
@@ -37,6 +40,21 @@ export default function App() {
       form.resetFields()
     })
   }
+
+  const handleSaveNodeToLibrary = (node, name, description) => {
+    setLibrary((lib) => ({
+      ...lib,
+      nodes: [...lib.nodes, { id: nextId('libnode'), name, description, node: cloneSubtree(node) }],
+    }))
+  }
+  const handleSaveScaleToLibrary = (scale, name) => {
+    setLibrary((lib) => ({
+      ...lib,
+      scales: [...lib.scales, { id: nextId('libscale'), name, description: '', scale: cloneScale(scale) }],
+    }))
+  }
+  const handleDeleteLibraryNode = (id) => setLibrary((lib) => ({ ...lib, nodes: lib.nodes.filter((n) => n.id !== id) }))
+  const handleDeleteLibraryScale = (id) => setLibrary((lib) => ({ ...lib, scales: lib.scales.filter((s) => s.id !== id) }))
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -76,9 +94,19 @@ export default function App() {
                       onChange={updateActiveTemplate}
                       methodologies={methodologies}
                       currentMethodologyId={editingId}
+                      library={library}
+                      onSaveNodeToLibrary={handleSaveNodeToLibrary}
+                      onSaveScaleToLibrary={handleSaveScaleToLibrary}
                     />
                   )}
                 </Space>
+              ),
+            },
+            {
+              key: 'library',
+              label: 'Библиотека',
+              children: (
+                <LibraryPanel library={library} onDeleteNode={handleDeleteLibraryNode} onDeleteScale={handleDeleteLibraryScale} />
               ),
             },
             {
