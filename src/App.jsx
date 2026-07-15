@@ -1,11 +1,12 @@
 import React, { useState } from 'react'
 import { Layout, Typography, Tabs, Select, Space, Tag, Button, Modal, Form, Input } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
+import { PlusOutlined, CopyOutlined } from '@ant-design/icons'
 import MethodologyEditor from './components/MethodologyEditor.jsx'
 import TestRunPanel from './components/TestRunPanel.jsx'
 import LibraryPanel from './components/LibraryPanel.jsx'
 import { initialMethodologies, levelOptions } from './data/methodologyTemplates.js'
 import { newRootTemplate, nextId, cloneSubtree, cloneScale } from './utils/treeOps.js'
+import { publishVersion } from './utils/versionOps.js'
 
 const { Header, Content } = Layout
 const { Title, Text } = Typography
@@ -16,12 +17,30 @@ export default function App() {
   const [newMethodModalOpen, setNewMethodModalOpen] = useState(false)
   const [form] = Form.useForm()
 
+  const [duplicateModalOpen, setDuplicateModalOpen] = useState(false)
+  const [duplicateName, setDuplicateName] = useState('')
+
   const [library, setLibrary] = useState({ nodes: [], scales: [] })
 
   const activeMethodology = methodologies.find((m) => m.id === editingId)
 
-  const updateActiveTemplate = (nextTemplate) => {
-    setMethodologies((list) => list.map((m) => (m.id === editingId ? { ...m, template: nextTemplate } : m)))
+  const updateActiveDraft = (nextTemplate) => {
+    setMethodologies((list) => list.map((m) => (m.id === editingId ? { ...m, draft: nextTemplate } : m)))
+  }
+
+  const handlePublishVersion = (note) => {
+    setMethodologies((list) => list.map((m) => (m.id === editingId ? publishVersion(m, note) : m)))
+  }
+
+  const handleRestoreDraftFromVersion = (versionId) => {
+    setMethodologies((list) =>
+      list.map((m) => {
+        if (m.id !== editingId) return m
+        const v = m.versions.find((x) => x.id === versionId)
+        if (!v) return m
+        return { ...m, draft: cloneSubtree(v.template) }
+      })
+    )
   }
 
   const handleCreateMethodology = () => {
@@ -32,13 +51,41 @@ export default function App() {
         name: values.name,
         level: values.level,
         assetType: values.assetType,
-        template: newRootTemplate(values.name),
+        draft: newRootTemplate(values.name),
+        versions: [],
       }
       setMethodologies((list) => [...list, newMethodology])
       setEditingId(id)
       setNewMethodModalOpen(false)
       form.resetFields()
     })
+  }
+
+  const handleDuplicateMethodology = () => {
+    if (!activeMethodology || !duplicateName.trim()) return
+    const id = nextId('meth')
+    const clonedDraft = cloneSubtree(activeMethodology.draft)
+    const newMethodology = {
+      id,
+      name: duplicateName.trim(),
+      level: activeMethodology.level,
+      assetType: activeMethodology.assetType,
+      draft: clonedDraft,
+      versions: [
+        {
+          id: nextId('ver'),
+          number: 1,
+          publishedAt: new Date().toISOString(),
+          note: `Скопировано из «${activeMethodology.name}»`,
+          template: cloneSubtree(clonedDraft),
+          status: 'active',
+        },
+      ],
+    }
+    setMethodologies((list) => [...list, newMethodology])
+    setEditingId(id)
+    setDuplicateModalOpen(false)
+    setDuplicateName('')
   }
 
   const handleSaveNodeToLibrary = (node, name, description) => {
@@ -95,16 +142,30 @@ export default function App() {
                     <Button icon={<PlusOutlined />} onClick={() => setNewMethodModalOpen(true)}>
                       Добавить методику
                     </Button>
+                    <Button
+                      icon={<CopyOutlined />}
+                      disabled={!activeMethodology}
+                      onClick={() => {
+                        setDuplicateName(activeMethodology ? `${activeMethodology.name} (копия)` : '')
+                        setDuplicateModalOpen(true)
+                      }}
+                    >
+                      Дублировать методику
+                    </Button>
                   </Space>
                   {activeMethodology && (
                     <MethodologyEditor
-                      template={activeMethodology.template}
-                      onChange={updateActiveTemplate}
+                      template={activeMethodology.draft}
+                      onChange={updateActiveDraft}
                       methodologies={methodologies}
                       currentMethodologyId={editingId}
                       library={library}
                       onSaveNodeToLibrary={handleSaveNodeToLibrary}
                       onSaveScaleToLibrary={handleSaveScaleToLibrary}
+                      showVersioning
+                      methodology={activeMethodology}
+                      onPublishVersion={handlePublishVersion}
+                      onRestoreDraftFromVersion={handleRestoreDraftFromVersion}
                     />
                   )}
                 </Space>
@@ -159,6 +220,23 @@ export default function App() {
             <Input placeholder="breaker" />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title="Дублировать методику"
+        open={duplicateModalOpen}
+        onCancel={() => setDuplicateModalOpen(false)}
+        onOk={handleDuplicateMethodology}
+        okButtonProps={{ disabled: !duplicateName.trim() }}
+        okText="Создать копию"
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Text type="secondary">
+            Создаст новую методику с независимой историей версий, взяв за основу текущий черновик «{activeMethodology?.name}».
+            Удобно для параллельных методик разного назначения (например, «внутренняя» и «надзорная»).
+          </Text>
+          <Input placeholder="Название новой методики" value={duplicateName} onChange={(e) => setDuplicateName(e.target.value)} />
+        </Space>
       </Modal>
     </Layout>
   )

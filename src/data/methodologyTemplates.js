@@ -272,20 +272,33 @@ export const objectMethodologyTemplate = {
 // Реестр методик — то, чем пользователь управляет через кнопку «Добавить методику».
 // Каждая запись знает, на каком уровне дерева активов и к какому типу актива она
 // применяется — это и используется при построении динамических групп на уровне объекта.
+function seedVersion(template, note) {
+  return {
+    id: `ver-seed-${Math.random().toString(36).slice(2, 8)}`,
+    number: 1,
+    publishedAt: '2026-01-15T09:00:00.000Z',
+    note: note || 'Первая публикация',
+    template,
+    status: 'active',
+  }
+}
+
 export const initialMethodologies = [
   {
     id: 'meth-transformer',
     name: 'Силовой трансформатор',
     level: 'equipment',
     assetType: 'transformer',
-    template: transformerMethodologyTemplate,
+    draft: transformerMethodologyTemplate,
+    versions: [seedVersion(transformerMethodologyTemplate, 'Методика по Приказу №676')],
   },
   {
     id: 'meth-ps',
     name: 'Подстанция (технологическая цепочка)',
     level: 'object',
     assetType: 'ps',
-    template: objectMethodologyTemplate,
+    draft: objectMethodologyTemplate,
+    versions: [seedVersion(objectMethodologyTemplate, 'Методика по Приказу №676')],
   },
 ]
 

@@ -5,8 +5,16 @@ import { calculateEquipmentIts, calculateObjectIts } from '../engine/calculate.j
 import ResultBreakdown from './ResultBreakdown.jsx'
 import { categoryFor } from '../engine/scale.js'
 import { objects, tms, tmcs } from '../data/mockAssets.js'
+import { resolveTemplate, getActiveVersion, versionLabel } from '../utils/versionOps.js'
 
 const { Text, Title } = Typography
+
+function versionOptionsFor(methodology) {
+  if (!methodology) return []
+  const opts = [{ value: 'draft', label: versionLabel(methodology, 'draft') }]
+  const sorted = [...methodology.versions].sort((a, b) => b.number - a.number)
+  return [...opts, ...sorted.map((v) => ({ value: v.id, label: versionLabel(methodology, v.id) }))]
+}
 
 export default function TestRunPanel({ methodologies }) {
   const equipmentMethodologies = methodologies.filter((m) => m.level === 'equipment')
@@ -14,6 +22,15 @@ export default function TestRunPanel({ methodologies }) {
 
   const [selectedMethodologyId, setSelectedMethodologyId] = useState(equipmentMethodologies[0]?.id)
   const selectedMethodology = methodologies.find((m) => m.id === selectedMethodologyId)
+
+  const [selectedVersionId, setSelectedVersionId] = useState(() => {
+    const active = selectedMethodology && getActiveVersion(selectedMethodology)
+    return active ? active.id : 'draft'
+  })
+  useEffect(() => {
+    const active = selectedMethodology && getActiveVersion(selectedMethodology)
+    setSelectedVersionId(active ? active.id : 'draft')
+  }, [selectedMethodologyId])
 
   const equipmentOptions = useMemo(() => {
     if (!selectedMethodology) return []
@@ -32,11 +49,23 @@ export default function TestRunPanel({ methodologies }) {
   const [history, setHistory] = useState([])
 
   const [selectedObjectMethodologyId, setSelectedObjectMethodologyId] = useState(objectMethodologies[0]?.id)
+  const selectedObjectMethodology = objectMethodologies.find((m) => m.id === selectedObjectMethodologyId)
+  const [selectedObjectVersionId, setSelectedObjectVersionId] = useState(() => {
+    const active = selectedObjectMethodology && getActiveVersion(selectedObjectMethodology)
+    return active ? active.id : 'draft'
+  })
+  useEffect(() => {
+    const active = selectedObjectMethodology && getActiveVersion(selectedObjectMethodology)
+    setSelectedObjectVersionId(active ? active.id : 'draft')
+  }, [selectedObjectMethodologyId])
   const [objectResult, setObjectResult] = useState(null)
+
+  const canRunOfficial = selectedMethodology && getActiveVersion(selectedMethodology)
 
   const runEquipment = (trial) => {
     if (!selectedMethodology || !selectedEquipment) return
-    const result = calculateEquipmentIts(selectedMethodology.template, selectedEquipment)
+    const tpl = resolveTemplate(selectedMethodology, selectedVersionId)
+    const result = calculateEquipmentIts(tpl, selectedEquipment)
     setLastResult(result)
     setLastIsTrial(trial)
     if (!trial) {
@@ -45,6 +74,7 @@ export default function TestRunPanel({ methodologies }) {
         {
           date: new Date().toLocaleString('ru-RU'),
           methodology: selectedMethodology.name,
+          version: versionLabel(selectedMethodology, selectedVersionId),
           equipment: equipmentOptions.find((e) => e.value === selectedEquipment)?.label,
           score: result.score,
           category: cat.label,
@@ -56,11 +86,11 @@ export default function TestRunPanel({ methodologies }) {
   }
 
   const runObject = () => {
-    const objectMethodology = objectMethodologies.find((m) => m.id === selectedObjectMethodologyId)
-    if (!objectMethodology) return
+    if (!selectedObjectMethodology) return
+    const tpl = resolveTemplate(selectedObjectMethodology, selectedObjectVersionId)
     const obj = objects[0]
     const tmsOfObject = tms.filter((t) => t.objectId === obj.id).map((t) => t.id)
-    const result = calculateObjectIts(objectMethodology.template, obj.id, tmsOfObject, methodologies)
+    const result = calculateObjectIts(tpl, obj.id, tmsOfObject, methodologies)
     setObjectResult(result)
   }
 
@@ -71,14 +101,20 @@ export default function TestRunPanel({ methodologies }) {
       <Card size="small" title="Расчёт по единице оборудования">
         <Space wrap>
           <Select
-            style={{ width: 320 }}
+            style={{ width: 260 }}
             placeholder="Методика оборудования"
             options={equipmentMethodologies.map((m) => ({ value: m.id, label: m.name }))}
             value={selectedMethodologyId}
             onChange={setSelectedMethodologyId}
           />
           <Select
-            style={{ width: 320 }}
+            style={{ width: 260 }}
+            options={versionOptionsFor(selectedMethodology)}
+            value={selectedVersionId}
+            onChange={setSelectedVersionId}
+          />
+          <Select
+            style={{ width: 260 }}
             placeholder="Единица оборудования"
             options={equipmentOptions}
             value={selectedEquipment}
@@ -88,19 +124,34 @@ export default function TestRunPanel({ methodologies }) {
           <Button icon={<PlayCircleOutlined />} disabled={!selectedEquipment} onClick={() => runEquipment(true)}>
             Пробный расчёт
           </Button>
-          <Button type="primary" icon={<CheckCircleOutlined />} disabled={!selectedEquipment} onClick={() => runEquipment(false)}>
+          <Button
+            type="primary"
+            icon={<CheckCircleOutlined />}
+            disabled={!selectedEquipment || !canRunOfficial}
+            onClick={() => runEquipment(false)}
+            title={!canRunOfficial ? 'У методики ещё нет опубликованной версии' : undefined}
+          >
             Официальный расчёт
           </Button>
         </Space>
+        {!canRunOfficial && selectedMethodology && (
+          <Alert
+            style={{ marginTop: 8 }}
+            type="warning"
+            showIcon
+            message="У этой методики ещё нет опубликованной версии — официальный расчёт недоступен, доступен только пробный (по черновику)."
+          />
+        )}
 
         {lastResult && (
           <>
             <Divider />
             <Space direction="vertical" style={{ width: '100%' }}>
-              <Space>
+              <Space wrap>
                 <Tag color={lastIsTrial ? 'default' : 'green'}>
                   {lastIsTrial ? 'Пробный расчёт — в историю не пишется' : 'Официальный расчёт — записан в историю'}
                 </Tag>
+                <Tag>{versionLabel(selectedMethodology, selectedVersionId)}</Tag>
                 {lastResult.status === 'ok' ? (
                   <Title level={4} style={{ margin: 0 }}>
                     ИТС = {lastResult.score.toFixed(1)}{' '}
@@ -128,6 +179,7 @@ export default function TestRunPanel({ methodologies }) {
             columns={[
               { title: 'Дата расчёта', dataIndex: 'date' },
               { title: 'Методика', dataIndex: 'methodology' },
+              { title: 'Версия методики', dataIndex: 'version' },
               { title: 'Оборудование', dataIndex: 'equipment' },
               { title: 'ИТС', dataIndex: 'score', render: (v) => v.toFixed(1) },
               {
@@ -142,13 +194,19 @@ export default function TestRunPanel({ methodologies }) {
 
       <Card size="small" title="Расчёт по объекту (технологическая цепочка)">
         <Space direction="vertical" style={{ width: '100%' }}>
-          <Space>
+          <Space wrap>
             <Select
-              style={{ width: 320 }}
+              style={{ width: 260 }}
               placeholder="Методика объекта"
               options={objectMethodologies.map((m) => ({ value: m.id, label: m.name }))}
               value={selectedObjectMethodologyId}
               onChange={setSelectedObjectMethodologyId}
+            />
+            <Select
+              style={{ width: 260 }}
+              options={versionOptionsFor(selectedObjectMethodology)}
+              value={selectedObjectVersionId}
+              onChange={setSelectedObjectVersionId}
             />
             <Text>Объект: {objects[0].name}</Text>
             <Button icon={<PlayCircleOutlined />} disabled={!selectedObjectMethodologyId} onClick={runObject}>

@@ -7,6 +7,7 @@ import {
   getRatedPower,
 } from './dataSources.js'
 import { tmcs } from '../data/mockAssets.js'
+import { getActiveVersion } from '../utils/versionOps.js'
 
 function sum(arr) {
   return arr.reduce((a, b) => a + b, 0)
@@ -210,7 +211,9 @@ export function calculateObjectIts(objectTemplate, objectId, tmsOfObject, method
         }
       }
       const equipmentResults = matchingTmcs.map((t) => {
-        const result = calculateEquipmentIts(linked.template, t.id)
+        const linkedVersion = getActiveVersion(linked)
+        const linkedTemplate = linkedVersion ? linkedVersion.template : linked.draft
+        const result = calculateEquipmentIts(linkedTemplate, t.id)
         return {
           ...result,
           name: `${node.name}: ${t.name}`,

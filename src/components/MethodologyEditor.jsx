@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
-import { Tree, Button, Space, Row, Col, Card, Popconfirm, Tag, Empty, Modal, Select, Typography, Input, List } from 'antd'
-import { PlusOutlined, DeleteOutlined, ApartmentOutlined, DatabaseOutlined, LinkOutlined, CopyOutlined, SaveOutlined, ImportOutlined } from '@ant-design/icons'
+import { Tree, Button, Space, Row, Col, Card, Popconfirm, Tag, Empty, Modal, Select, Typography, Input, List, Alert } from 'antd'
+import { PlusOutlined, DeleteOutlined, ApartmentOutlined, DatabaseOutlined, LinkOutlined, CopyOutlined, SaveOutlined, ImportOutlined, TagsOutlined, HistoryOutlined } from '@ant-design/icons'
 import NodeEditor from './NodeEditor.jsx'
 import {
   updateNodeById,
@@ -12,6 +12,7 @@ import {
   cloneSubtree,
 } from '../utils/treeOps.js'
 import { strategyOptions } from '../data/catalog.js'
+import { versionLabel } from '../utils/versionOps.js'
 
 const { Text } = Typography
 const { TextArea } = Input
@@ -62,6 +63,10 @@ export default function MethodologyEditor({
   library,
   onSaveNodeToLibrary,
   onSaveScaleToLibrary,
+  showVersioning = false,
+  methodology,
+  onPublishVersion,
+  onRestoreDraftFromVersion,
 }) {
   const [selectedId, setSelectedId] = useState(template.id)
   const [copyModalOpen, setCopyModalOpen] = useState(false)
@@ -73,6 +78,9 @@ export default function MethodologyEditor({
   const [saveLibName, setSaveLibName] = useState('')
   const [saveLibDescription, setSaveLibDescription] = useState('')
   const [insertLibModalOpen, setInsertLibModalOpen] = useState(false)
+  const [publishModalOpen, setPublishModalOpen] = useState(false)
+  const [publishNote, setPublishNote] = useState('')
+  const [historyModalOpen, setHistoryModalOpen] = useState(false)
 
   const treeData = useMemo(() => [buildTreeData(template)], [template])
   const selectedNode = useMemo(() => findNode(template, selectedId), [template, selectedId])
@@ -123,8 +131,37 @@ export default function MethodologyEditor({
     setInsertLibModalOpen(false)
   }
 
+  const handleConfirmPublish = () => {
+    onPublishVersion(publishNote.trim())
+    setPublishModalOpen(false)
+    setPublishNote('')
+  }
+
+  const activeVersion = methodology?.versions?.find((v) => v.status === 'active')
+
   return (
-    <Row gutter={16}>
+    <>
+      {showVersioning && methodology && (
+        <Alert
+          style={{ marginBottom: 12 }}
+          type="info"
+          message={
+            <Space wrap>
+              <Text strong>Черновик редактируется.</Text>
+              <Text type="secondary">
+                Действующая версия: {activeVersion ? versionLabel(methodology, activeVersion.id) : 'ещё не публиковалась'}
+              </Text>
+              <Button size="small" type="primary" icon={<TagsOutlined />} onClick={() => setPublishModalOpen(true)}>
+                Опубликовать версию
+              </Button>
+              <Button size="small" icon={<HistoryOutlined />} onClick={() => setHistoryModalOpen(true)}>
+                История версий ({methodology.versions.length})
+              </Button>
+            </Space>
+          }
+        />
+      )}
+      <Row gutter={16}>
       <Col span={11}>
         <Card
           size="small"
@@ -299,6 +336,71 @@ export default function MethodologyEditor({
           />
         )}
       </Modal>
+
+      {showVersioning && (
+        <>
+          <Modal
+            title="Опубликовать версию методики"
+            open={publishModalOpen}
+            onCancel={() => setPublishModalOpen(false)}
+            onOk={handleConfirmPublish}
+            okText="Опубликовать"
+          >
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Text type="secondary">
+                Текущий черновик будет заморожен как версия v{(methodology?.versions?.length || 0) + 1} и станет действующей.
+                Предыдущая действующая версия перейдёт в архивные (не удаляется, доступна для истории и пробного расчёта).
+              </Text>
+              <TextArea
+                placeholder="Что изменилось в этой версии (необязательно)"
+                value={publishNote}
+                onChange={(e) => setPublishNote(e.target.value)}
+                rows={2}
+              />
+            </Space>
+          </Modal>
+
+          <Modal
+            title="История версий"
+            open={historyModalOpen}
+            onCancel={() => setHistoryModalOpen(false)}
+            footer={null}
+            width={640}
+          >
+            <List
+              dataSource={[...(methodology?.versions || [])].sort((a, b) => b.number - a.number)}
+              renderItem={(v) => (
+                <List.Item
+                  actions={[
+                    <Button
+                      key="restore"
+                      size="small"
+                      onClick={() => {
+                        onRestoreDraftFromVersion(v.id)
+                        setHistoryModalOpen(false)
+                      }}
+                    >
+                      Восстановить в черновик
+                    </Button>,
+                  ]}
+                >
+                  <Space direction="vertical" size={0}>
+                    <Space>
+                      <Text strong>v{v.number}</Text>
+                      <Tag color={v.status === 'active' ? 'green' : 'default'}>
+                        {v.status === 'active' ? 'действующая' : 'архивная'}
+                      </Tag>
+                      <Text type="secondary">{new Date(v.publishedAt).toLocaleString('ru-RU')}</Text>
+                    </Space>
+                    {v.note && <Text type="secondary">{v.note}</Text>}
+                  </Space>
+                </List.Item>
+              )}
+            />
+          </Modal>
+        </>
+      )}
     </Row>
+    </>
   )
 }
