@@ -26,7 +26,7 @@ import { cloneScale } from '../utils/treeOps.js'
 
 const { Text, Title } = Typography
 
-function NumericZonesEditor({ zones, onChange }) {
+export function NumericZonesEditor({ zones, onChange }) {
   const update = (idx, patch) => {
     const next = zones.slice()
     next[idx] = { ...next[idx], ...patch }
@@ -77,7 +77,7 @@ function NumericZonesEditor({ zones, onChange }) {
   )
 }
 
-function CategoricalMapEditor({ map, onChange }) {
+export function CategoricalMapEditor({ map, onChange }) {
   const update = (idx, patch) => {
     const next = map.slice()
     next[idx] = { ...next[idx], ...patch }

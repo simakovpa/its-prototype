@@ -42,19 +42,27 @@ export default function App() {
   }
 
   const handleSaveNodeToLibrary = (node, name, description) => {
+    const id = nextId('libnode')
     setLibrary((lib) => ({
       ...lib,
-      nodes: [...lib.nodes, { id: nextId('libnode'), name, description, node: cloneSubtree(node) }],
+      nodes: [...lib.nodes, { id, name, description, node: cloneSubtree(node) }],
     }))
+    return id
   }
   const handleSaveScaleToLibrary = (scale, name) => {
+    const id = nextId('libscale')
     setLibrary((lib) => ({
       ...lib,
-      scales: [...lib.scales, { id: nextId('libscale'), name, description: '', scale: cloneScale(scale) }],
+      scales: [...lib.scales, { id, name, description: '', scale: cloneScale(scale) }],
     }))
+    return id
   }
   const handleDeleteLibraryNode = (id) => setLibrary((lib) => ({ ...lib, nodes: lib.nodes.filter((n) => n.id !== id) }))
   const handleDeleteLibraryScale = (id) => setLibrary((lib) => ({ ...lib, scales: lib.scales.filter((s) => s.id !== id) }))
+  const handleUpdateLibraryNode = (id, nextNode) =>
+    setLibrary((lib) => ({ ...lib, nodes: lib.nodes.map((n) => (n.id === id ? { ...n, node: nextNode } : n)) }))
+  const handleUpdateLibraryScale = (id, nextScale) =>
+    setLibrary((lib) => ({ ...lib, scales: lib.scales.map((s) => (s.id === id ? { ...s, scale: nextScale } : s)) }))
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -106,7 +114,17 @@ export default function App() {
               key: 'library',
               label: 'Библиотека',
               children: (
-                <LibraryPanel library={library} onDeleteNode={handleDeleteLibraryNode} onDeleteScale={handleDeleteLibraryScale} />
+                <LibraryPanel
+                  library={library}
+                  methodologies={methodologies}
+                  onDeleteNode={handleDeleteLibraryNode}
+                  onDeleteScale={handleDeleteLibraryScale}
+                  onCreateNode={(name, description, node) => handleSaveNodeToLibrary(node, name, description)}
+                  onUpdateNode={handleUpdateLibraryNode}
+                  onCreateScale={(name, scale) => handleSaveScaleToLibrary(scale, name)}
+                  onUpdateScale={handleUpdateLibraryScale}
+                  onSaveScaleToLibrary={handleSaveScaleToLibrary}
+                />
               ),
             },
             {
