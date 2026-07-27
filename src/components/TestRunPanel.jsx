@@ -16,9 +16,10 @@ function versionOptionsFor(methodology) {
   return [...opts, ...sorted.map((v) => ({ value: v.id, label: versionLabel(methodology, v.id) }))]
 }
 
-export default function TestRunPanel({ methodologies }) {
-  const equipmentMethodologies = methodologies.filter((m) => m.level === 'equipment')
-  const objectMethodologies = methodologies.filter((m) => m.level === 'object')
+export default function TestRunPanel({ methodologies, library }) {
+  const activeMethodologies = methodologies.filter((m) => m.status !== 'archived')
+  const equipmentMethodologies = activeMethodologies.filter((m) => m.level === 'equipment')
+  const objectMethodologies = activeMethodologies.filter((m) => m.level === 'object')
 
   const [selectedMethodologyId, setSelectedMethodologyId] = useState(equipmentMethodologies[0]?.id)
   const selectedMethodology = methodologies.find((m) => m.id === selectedMethodologyId)
@@ -34,15 +35,11 @@ export default function TestRunPanel({ methodologies }) {
 
   const equipmentOptions = useMemo(() => {
     if (!selectedMethodology) return []
-    return tmcs
-      .filter((t) => t.tmcType === selectedMethodology.assetType)
-      .map((t) => ({ value: t.id, label: t.name }))
+    return tmcs.filter((t) => t.tmcType === selectedMethodology.assetType).map((t) => ({ value: t.id, label: t.name }))
   }, [selectedMethodology])
 
   const [selectedEquipment, setSelectedEquipment] = useState(equipmentOptions[0]?.value)
-  useEffect(() => {
-    setSelectedEquipment(equipmentOptions[0]?.value)
-  }, [selectedMethodologyId])
+  useEffect(() => { setSelectedEquipment(equipmentOptions[0]?.value) }, [selectedMethodologyId])
 
   const [lastResult, setLastResult] = useState(null)
   const [lastIsTrial, setLastIsTrial] = useState(true)
@@ -65,7 +62,7 @@ export default function TestRunPanel({ methodologies }) {
   const runEquipment = (trial) => {
     if (!selectedMethodology || !selectedEquipment) return
     const tpl = resolveTemplate(selectedMethodology, selectedVersionId)
-    const result = calculateEquipmentIts(tpl, selectedEquipment)
+    const result = calculateEquipmentIts(tpl, selectedEquipment, library)
     setLastResult(result)
     setLastIsTrial(trial)
     if (!trial) {
@@ -90,7 +87,7 @@ export default function TestRunPanel({ methodologies }) {
     const tpl = resolveTemplate(selectedObjectMethodology, selectedObjectVersionId)
     const obj = objects[0]
     const tmsOfObject = tms.filter((t) => t.objectId === obj.id).map((t) => t.id)
-    const result = calculateObjectIts(tpl, obj.id, tmsOfObject, methodologies)
+    const result = calculateObjectIts(tpl, obj.id, tmsOfObject, methodologies, library)
     setObjectResult(result)
   }
 
@@ -100,47 +97,16 @@ export default function TestRunPanel({ methodologies }) {
     <Space direction="vertical" style={{ width: '100%' }} size="large">
       <Card size="small" title="Расчёт по единице оборудования">
         <Space wrap>
-          <Select
-            style={{ width: 260 }}
-            placeholder="Методика оборудования"
-            options={equipmentMethodologies.map((m) => ({ value: m.id, label: m.name }))}
-            value={selectedMethodologyId}
-            onChange={setSelectedMethodologyId}
-          />
-          <Select
-            style={{ width: 260 }}
-            options={versionOptionsFor(selectedMethodology)}
-            value={selectedVersionId}
-            onChange={setSelectedVersionId}
-          />
-          <Select
-            style={{ width: 260 }}
-            placeholder="Единица оборудования"
-            options={equipmentOptions}
-            value={selectedEquipment}
-            onChange={setSelectedEquipment}
-            notFoundContent="Нет активов такого типа в моковых данных"
-          />
-          <Button icon={<PlayCircleOutlined />} disabled={!selectedEquipment} onClick={() => runEquipment(true)}>
-            Пробный расчёт
-          </Button>
-          <Button
-            type="primary"
-            icon={<CheckCircleOutlined />}
-            disabled={!selectedEquipment || !canRunOfficial}
-            onClick={() => runEquipment(false)}
-            title={!canRunOfficial ? 'У методики ещё нет опубликованной версии' : undefined}
-          >
+          <Select style={{ width: 260 }} placeholder="Методика оборудования" options={equipmentMethodologies.map((m) => ({ value: m.id, label: m.name }))} value={selectedMethodologyId} onChange={setSelectedMethodologyId} />
+          <Select style={{ width: 260 }} options={versionOptionsFor(selectedMethodology)} value={selectedVersionId} onChange={setSelectedVersionId} />
+          <Select style={{ width: 260 }} placeholder="Единица оборудования" options={equipmentOptions} value={selectedEquipment} onChange={setSelectedEquipment} notFoundContent="Нет активов такого типа в моковых данных" />
+          <Button icon={<PlayCircleOutlined />} disabled={!selectedEquipment} onClick={() => runEquipment(true)}>Пробный расчёт</Button>
+          <Button type="primary" icon={<CheckCircleOutlined />} disabled={!selectedEquipment || !canRunOfficial} onClick={() => runEquipment(false)} title={!canRunOfficial ? 'У методики ещё нет опубликованной версии' : undefined}>
             Официальный расчёт
           </Button>
         </Space>
         {!canRunOfficial && selectedMethodology && (
-          <Alert
-            style={{ marginTop: 8 }}
-            type="warning"
-            showIcon
-            message="У этой методики ещё нет опубликованной версии — официальный расчёт недоступен, доступен только пробный (по черновику)."
-          />
+          <Alert style={{ marginTop: 8 }} type="warning" showIcon message="У этой методики ещё нет опубликованной версии — официальный расчёт недоступен, доступен только пробный (по черновику)." />
         )}
 
         {lastResult && (
@@ -148,16 +114,11 @@ export default function TestRunPanel({ methodologies }) {
             <Divider />
             <Space direction="vertical" style={{ width: '100%' }}>
               <Space wrap>
-                <Tag color={lastIsTrial ? 'default' : 'green'}>
-                  {lastIsTrial ? 'Пробный расчёт — в историю не пишется' : 'Официальный расчёт — записан в историю'}
-                </Tag>
+                <Tag color={lastIsTrial ? 'default' : 'green'}>{lastIsTrial ? 'Пробный расчёт — в историю не пишется' : 'Официальный расчёт — записан в историю'}</Tag>
                 <Tag>{versionLabel(selectedMethodology, selectedVersionId)}</Tag>
                 {lastResult.status === 'ok' ? (
                   <Title level={4} style={{ margin: 0 }}>
-                    ИТС = {lastResult.score.toFixed(1)}{' '}
-                    <Tag color={finalCategory.color} style={{ color: '#fff' }}>
-                      {finalCategory.label}
-                    </Tag>
+                    ИТС = {lastResult.score.toFixed(1)} <Tag color={finalCategory.color} style={{ color: '#fff' }}>{finalCategory.label}</Tag>
                   </Title>
                 ) : (
                   <Alert type="warning" showIcon message="Не определено — недостаточно данных для расчёта" />
@@ -182,11 +143,7 @@ export default function TestRunPanel({ methodologies }) {
               { title: 'Версия методики', dataIndex: 'version' },
               { title: 'Оборудование', dataIndex: 'equipment' },
               { title: 'ИТС', dataIndex: 'score', render: (v) => v.toFixed(1) },
-              {
-                title: 'Категория',
-                dataIndex: 'category',
-                render: (v, r) => <Tag color={r.color} style={{ color: '#fff' }}>{v}</Tag>,
-              },
+              { title: 'Категория', dataIndex: 'category', render: (v, r) => <Tag color={r.color} style={{ color: '#fff' }}>{v}</Tag> },
             ]}
           />
         </Card>
@@ -195,32 +152,21 @@ export default function TestRunPanel({ methodologies }) {
       <Card size="small" title="Расчёт по объекту (технологическая цепочка)">
         <Space direction="vertical" style={{ width: '100%' }}>
           <Space wrap>
-            <Select
-              style={{ width: 260 }}
-              placeholder="Методика объекта"
-              options={objectMethodologies.map((m) => ({ value: m.id, label: m.name }))}
-              value={selectedObjectMethodologyId}
-              onChange={setSelectedObjectMethodologyId}
-            />
-            <Select
-              style={{ width: 260 }}
-              options={versionOptionsFor(selectedObjectMethodology)}
-              value={selectedObjectVersionId}
-              onChange={setSelectedObjectVersionId}
-            />
+            <Select style={{ width: 260 }} placeholder="Методика объекта" options={objectMethodologies.map((m) => ({ value: m.id, label: m.name }))} value={selectedObjectMethodologyId} onChange={setSelectedObjectMethodologyId} />
+            <Select style={{ width: 260 }} options={versionOptionsFor(selectedObjectMethodology)} value={selectedObjectVersionId} onChange={setSelectedObjectVersionId} />
             <Text>Объект: {objects[0].name}</Text>
-            <Button icon={<PlayCircleOutlined />} disabled={!selectedObjectMethodologyId} onClick={runObject}>
-              Рассчитать ИТС объекта
-            </Button>
+            <Button icon={<PlayCircleOutlined />} disabled={!selectedObjectMethodologyId} onClick={runObject}>Рассчитать ИТС объекта</Button>
           </Space>
+          <Alert
+            type="info"
+            showIcon
+            message="Версии связанного через динамические группы оборудования всегда действующие — переопределить их отдельно для этого расчёта нельзя (ни для пробного, ни для официального)."
+          />
           {objectResult ? (
             <>
               {objectResult.status === 'ok' && (
                 <Title level={4}>
-                  ИТС объекта = {objectResult.score.toFixed(1)}{' '}
-                  <Tag color={categoryFor(objectResult.score).color} style={{ color: '#fff' }}>
-                    {categoryFor(objectResult.score).label}
-                  </Tag>
+                  ИТС объекта = {objectResult.score.toFixed(1)} <Tag color={categoryFor(objectResult.score).color} style={{ color: '#fff' }}>{categoryFor(objectResult.score).label}</Tag>
                 </Title>
               )}
               <ResultBreakdown result={objectResult} />

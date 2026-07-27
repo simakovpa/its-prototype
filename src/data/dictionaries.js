@@ -1,27 +1,7 @@
-// Справочники — аналог общесистемных справочников (Номенклатура, Типы дефектов,
-// Измеряемые параметры из модуля «Испытания и измерения»). В прототипе — моковые данные.
-
 export const nomenclature = [
-  {
-    id: 'nom-tdtn-40000-110',
-    name: 'ТДТН-40000/110',
-    tmcType: 'transformer',
-    ratedPowerMVA: 40,
-    normativeServiceLifeYears: 25,
-  },
-  {
-    id: 'nom-tdtn-63000-110',
-    name: 'ТДТН-63000/110',
-    tmcType: 'transformer',
-    ratedPowerMVA: 63,
-    normativeServiceLifeYears: 25,
-  },
-  {
-    id: 'nom-vvbo-110',
-    name: 'Ввод ВВБО-110',
-    tmcType: 'bushing',
-    normativeServiceLifeYears: 15,
-  },
+  { id: 'nom-tdtn-40000-110', name: 'ТДТН-40000/110', tmcType: 'transformer', ratedPowerMVA: 40, normativeServiceLifeYears: 25 },
+  { id: 'nom-tdtn-63000-110', name: 'ТДТН-63000/110', tmcType: 'transformer', ratedPowerMVA: 63, normativeServiceLifeYears: 25 },
+  { id: 'nom-vvbo-110', name: 'Ввод ВВБО-110', tmcType: 'bushing', normativeServiceLifeYears: 15 },
 ]
 
 export const defectTypes = [
@@ -31,7 +11,6 @@ export const defectTypes = [
   { id: 'def-oil-leak', name: 'Течь масла / разгерметизация' },
 ]
 
-// Тип сравнения с нормой, как в справочнике «Измеряемый параметр» модуля «Испытания и измерения»
 export const measuredParams = [
   { id: 'mp-tg-delta', name: 'tgδ изоляции обмоток', unit: '%', comparisonType: 'not_more' },
   { id: 'mp-winding-resistance', name: 'Сопротивление обмоток', unit: 'Ом', comparisonType: 'in_range' },

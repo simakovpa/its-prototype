@@ -1,7 +1,3 @@
-// Сопоставление факта со шкалой оценки — раздел 9.2/9.1 архитектурного документа.
-// Числовая шкала: массив зон { min, minInclusive, max, maxInclusive, score }.
-// Категориальная шкала: массив { value, score }.
-
 export function evaluateNumericScale(zones, value) {
   for (const z of zones) {
     const minOk = z.min == null || (z.minInclusive ? value >= z.min : value > z.min)
@@ -16,8 +12,6 @@ export function evaluateCategoricalScale(map, value) {
   return entry ? entry.score : null
 }
 
-// Категории технического состояния (раздел 9.3) — тоже зоны, но применяются
-// к итоговому индексу 0–100, а не к сырому параметру.
 export const defaultConditionCategories = [
   { min: 0, minInclusive: true, max: 25, maxInclusive: true, label: 'Критическое', color: '#cf1322' },
   { min: 25, minInclusive: false, max: 50, maxInclusive: true, label: 'Неудовлетворительное', color: '#d46b08' },

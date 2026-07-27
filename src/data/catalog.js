@@ -7,6 +7,10 @@ export const strategyOptions = [
   { value: 'THRESHOLD_SHARE_SWITCH', label: 'Условная свёртка по доле «плохих» элементов' },
 ]
 
+// Стратегии, доступные как ветка А/Б внутри условной свёртки — сама условная
+// свёртка сюда не входит (архитектурное решение по итогам стресс-теста, п.7).
+export const subStrategyOptions = strategyOptions.filter((s) => s.value !== 'THRESHOLD_SHARE_SWITCH')
+
 export const sourceTypeOptions = [
   { value: 'measured', label: 'Измеряемый параметр (Испытания и измерения)' },
   { value: 'defect', label: 'Дефект (агрегат из Осмотры и дефекты)' },

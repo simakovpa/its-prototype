@@ -12,20 +12,11 @@ function ScoreTag({ result }) {
 
   if (result.scaleKind === 'index') {
     const cat = categoryFor(result.score)
-    return (
-      <Tag color={cat.color} style={{ color: '#fff' }}>
-        {result.score.toFixed(1)} — {cat.label}
-      </Tag>
-    )
+    return <Tag color={cat.color} style={{ color: '#fff' }}>{result.score.toFixed(1)} — {cat.label}</Tag>
   }
-  // балльная шкала 0–4
   const ballColors = ['#cf1322', '#d46b08', '#d4b106', '#7cb305', '#237804']
   const idx = Math.max(0, Math.min(4, Math.round(result.score)))
-  return (
-    <Tag color={ballColors[idx]} style={{ color: '#fff' }}>
-      балл {result.score}
-    </Tag>
-  )
+  return <Tag color={ballColors[idx]} style={{ color: '#fff' }}>балл {result.score}</Tag>
 }
 
 function nodeTitle(result) {
@@ -35,19 +26,20 @@ function nodeTitle(result) {
       <ScoreTag result={result} />
       {result.correctionFired && (
         <Tooltip title={result.correctionFired.description || 'Сработало правило коррекции'}>
-          <Tag icon={<WarningOutlined />} color="volcano">
-            коррекция
-          </Tag>
+          <Tag icon={<WarningOutlined />} color="volcano">коррекция</Tag>
         </Tooltip>
       )}
       {result.strategyMeta && (
-        <Tag color="geekblue">
-          выбрана: {result.strategyMeta.chosenStrategy} (доля плохих {(result.strategyMeta.share * 100).toFixed(0)}%)
-        </Tag>
+        <Tag color="geekblue">выбрана: {result.strategyMeta.chosenStrategy} (доля плохих {(result.strategyMeta.share * 100).toFixed(0)}%)</Tag>
       )}
       {!!result.renormalizedFrom && (
         <Tooltip title="Часть дочерних элементов исключена — веса остальных перенормированы">
           <Tag icon={<QuestionCircleOutlined />}>перенормировано</Tag>
+        </Tooltip>
+      )}
+      {result.attributeMissing && (
+        <Tooltip title="Нет значения показателя приведения — исключён из свёртки объекта">
+          <Tag color="default">нет показателя приведения</Tag>
         </Tooltip>
       )}
       {result.note && (

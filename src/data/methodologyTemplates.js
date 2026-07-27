@@ -1,6 +1,5 @@
 // «Шаблон расчёта ИТС» — конфигурация методики. Рекурсивное дерево из одной и той же
-// сущности «Узел методики» (kind: 'container' | 'leaf'), см. разделы 1–9 архитектурного документа.
-// Ниже — пример для силового трансформатора (по мотивам Приказа №676) и для объекта (ПС).
+// сущности «Узел методики» (kind: 'container' | 'leaf' | 'dynamicGroup' | 'libraryRef').
 
 const scaleAbsoluteTgDelta = {
   kind: 'numeric',
@@ -12,7 +11,6 @@ const scaleAbsoluteTgDelta = {
     { min: 4, minInclusive: true, score: 0 },
   ],
 }
-
 const scaleTrendNoLoadLosses = {
   kind: 'numeric',
   zones: [
@@ -23,7 +21,6 @@ const scaleTrendNoLoadLosses = {
     { min: 25, minInclusive: false, score: 0 },
   ],
 }
-
 const scaleAgeUsage = {
   kind: 'numeric',
   zones: [
@@ -34,7 +31,6 @@ const scaleAgeUsage = {
     { min: 110, minInclusive: false, score: 0 },
   ],
 }
-
 const scaleDefectPresence = {
   kind: 'categorical',
   map: [
@@ -249,8 +245,6 @@ export const transformerMethodologyTemplate = {
   ],
 }
 
-// Методика уровня Объекта — та же сущность, только звенья технологической
-// цепочки резолвятся динамически на реальном составе оборудования объекта.
 export const objectMethodologyTemplate = {
   id: 'root-object',
   name: 'ИТС объекта — технологическая цепочка',
@@ -269,9 +263,6 @@ export const objectMethodologyTemplate = {
   ],
 }
 
-// Реестр методик — то, чем пользователь управляет через кнопку «Добавить методику».
-// Каждая запись знает, на каком уровне дерева активов и к какому типу актива она
-// применяется — это и используется при построении динамических групп на уровне объекта.
 function seedVersion(template, note) {
   return {
     id: `ver-seed-${Math.random().toString(36).slice(2, 8)}`,
@@ -289,6 +280,7 @@ export const initialMethodologies = [
     name: 'Силовой трансформатор',
     level: 'equipment',
     assetType: 'transformer',
+    status: 'active',
     draft: transformerMethodologyTemplate,
     versions: [seedVersion(transformerMethodologyTemplate, 'Методика по Приказу №676')],
   },
@@ -297,6 +289,7 @@ export const initialMethodologies = [
     name: 'Подстанция (технологическая цепочка)',
     level: 'object',
     assetType: 'ps',
+    status: 'active',
     draft: objectMethodologyTemplate,
     versions: [seedVersion(objectMethodologyTemplate, 'Методика по Приказу №676')],
   },

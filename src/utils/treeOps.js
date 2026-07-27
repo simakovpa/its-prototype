@@ -1,5 +1,4 @@
 // Иммутабельные операции над рекурсивным деревом «Шаблона расчёта ИТС».
-// Дерево — обычный вложенный JS-объект (см. methodologyTemplates.js).
 
 let idCounter = 1
 export function nextId(prefix) {
@@ -24,24 +23,24 @@ export function updateNodeById(root, id, updater) {
 
 export function deleteNodeById(root, id) {
   if (!root.children) return root
-  return {
-    ...root,
-    children: root.children.filter((c) => c.id !== id).map((c) => deleteNodeById(c, id)),
-  }
+  return { ...root, children: root.children.filter((c) => c.id !== id).map((c) => deleteNodeById(c, id)) }
 }
 
 export function addChildTo(root, parentId, newNode) {
-  if (root.id === parentId) {
-    return { ...root, children: [...(root.children || []), newNode] }
-  }
+  if (root.id === parentId) return { ...root, children: [...(root.children || []), newNode] }
   if (!root.children) return root
   return { ...root, children: root.children.map((c) => addChildTo(c, parentId, newNode)) }
 }
 
+// Простое клонирование поддерева с новыми id. Узлы-ссылки на библиотеку
+// (kind: 'libraryRef') копируются как ссылки — это ожидаемое поведение,
+// а не утечка связи (библиотека для того и существует). Узлы-динамические
+// группы копируются "как есть" здесь; для копий, где связанная методика
+// должна дублироваться, используйте cloneSubtreeWithMethodologyDuplication.
 export function cloneSubtree(node) {
   const cloned = {
     ...node,
-    id: nextId(node.kind === 'leaf' ? 'leaf' : node.kind === 'dynamicGroup' ? 'dyngroup' : 'container'),
+    id: nextId(node.kind === 'leaf' ? 'leaf' : node.kind === 'dynamicGroup' ? 'dyngroup' : node.kind === 'libraryRef' ? 'libref' : 'container'),
   }
   if (node.children) {
     cloned.children = node.children.map(cloneSubtree)
@@ -49,8 +48,70 @@ export function cloneSubtree(node) {
   return cloned
 }
 
+// Клонирование с дублированием связанных методик у встреченных динамических
+// групп (архитектурное решение по итогам стресс-теста, п.8): копия узла
+// должна быть по-настоящему независимой, а не тайно продолжать указывать на
+// исходную связанную методику.
+export function cloneSubtreeWithMethodologyDuplication(node, duplicateLinkedMethodology) {
+  const newMethodologies = []
+
+  function walk(n) {
+    const cloned = {
+      ...n,
+      id: nextId(n.kind === 'leaf' ? 'leaf' : n.kind === 'dynamicGroup' ? 'dyngroup' : n.kind === 'libraryRef' ? 'libref' : 'container'),
+    }
+    if (n.kind === 'dynamicGroup' && n.linkedMethodologyId) {
+      const newMethodology = duplicateLinkedMethodology(n.linkedMethodologyId)
+      if (newMethodology) {
+        newMethodologies.push(newMethodology)
+        cloned.linkedMethodologyId = newMethodology.id
+        cloned.name = newMethodology.name
+      }
+    }
+    if (n.children) {
+      cloned.children = n.children.map(walk)
+    }
+    return cloned
+  }
+
+  const clonedNode = walk(node)
+  return { clonedNode, newMethodologies }
+}
+
+// Возвращает true, если где-то в поддереве встречается динамическая группа.
+export function subtreeContainsDynamicGroup(node) {
+  if (node.kind === 'dynamicGroup') return true
+  return (node.children || []).some(subtreeContainsDynamicGroup)
+}
+
 export function cloneScale(scale) {
   return JSON.parse(JSON.stringify(scale))
+}
+
+// Разрешает все узлы-ссылки на библиотеку в поддереве в конкретное
+// содержимое соответствующей библиотечной записи — используется при
+// публикации версии методики (стресс-тест, п.8.1): опубликованная версия
+// не должна содержать незамороженных ссылок.
+export function resolveLibraryRefsDeep(node, library) {
+  if (node.kind === 'libraryRef') {
+    const libItem = library.nodes.find((n) => n.id === node.libraryNodeId)
+    if (!libItem) {
+      // Библиотечная запись не найдена (например, архивирована и затем удалена
+      // из демо-данных) — оставляем узел как пустой контейнер с пометкой.
+      return { ...node, kind: 'container', strategy: 'MIN', children: [], name: `${node.name} (источник не найден)` }
+    }
+    const resolvedContent = resolveLibraryRefsDeep(libItem.node, library)
+    return {
+      ...resolvedContent,
+      id: nextId('resolved'),
+      name: node.name,
+      weight: node.weight,
+      critical: node.critical,
+      resourceDefining: node.resourceDefining,
+    }
+  }
+  if (!node.children) return node
+  return { ...node, children: node.children.map((c) => resolveLibraryRefsDeep(c, library)) }
 }
 
 export function newRootTemplate(name) {
@@ -92,6 +153,18 @@ export function newDynamicGroupNode(linkedMethodology) {
     strategy: 'WEIGHTED_BY_ATTRIBUTE',
     weight: 1,
     optional: true,
+  }
+}
+
+export function newLibraryRefNode(libItem) {
+  return {
+    id: nextId('libref'),
+    name: libItem.name,
+    kind: 'libraryRef',
+    libraryNodeId: libItem.id,
+    weight: 1,
+    critical: false,
+    resourceDefining: false,
   }
 }
 

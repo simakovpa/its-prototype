@@ -1,19 +1,31 @@
-import { strategies, applyCorrectionRule } from './strategies.js'
+import { strategies, checkCorrectionRule } from './strategies.js'
 import { evaluateNumericScale, evaluateCategoricalScale } from './scale.js'
-import {
-  getMeasuredSeries,
-  getOpenDefectCount,
-  getAgeUsagePercent,
-  getRatedPower,
-} from './dataSources.js'
+import { getMeasuredSeries, getOpenDefectCount, getAgeUsagePercent, getRatedPower } from './dataSources.js'
 import { tmcs } from '../data/mockAssets.js'
 import { getActiveVersion } from '../utils/versionOps.js'
+import { resolveLibraryRefsDeep } from '../utils/treeOps.js'
 
 function sum(arr) {
   return arr.reduce((a, b) => a + b, 0)
 }
 
-// ---------- Лист дерева методики: Параметр ----------
+// Применяет по порядку все правила коррекции узла. Каждое правило
+// проверяется против исходного (rawScore), ещё не скорректированного
+// результата и против ПОЛНОГО списка дочерних узлов (включая исключённых) —
+// решения стресс-теста, пп.4 и 12. Побеждает последнее сработавшее правило.
+function applyAllCorrectionRules(rules, rawScore, allChildren) {
+  let finalScore = rawScore
+  let correctionFired = null
+  for (const rule of rules || []) {
+    const r = checkCorrectionRule(rule, rawScore, allChildren)
+    if (r.fired) {
+      finalScore = r.value
+      correctionFired = rule
+    }
+  }
+  return { finalScore, correctionFired }
+}
+
 function evaluateLeaf(node, ctx) {
   const base = {
     id: node.id,
@@ -74,16 +86,9 @@ function evaluateLeaf(node, ctx) {
     return { ...base, status: 'excluded', score: null, factDisplay: `${factDisplay} — вне заданных зон норматива` }
   }
 
-  return {
-    ...base,
-    status: 'ok',
-    score,
-    scaleKind: 'ball',
-    factDisplay,
-  }
+  return { ...base, status: 'ok', score, scaleKind: 'ball', factDisplay }
 }
 
-// ---------- Контейнер: Этап / Узел / Группа / корень методики ----------
 function evaluateContainer(node, ctx) {
   const base = {
     id: node.id,
@@ -96,9 +101,7 @@ function evaluateContainer(node, ctx) {
 
   let effectiveCtx = ctx
   if (node.materialization?.type === 'materialized') {
-    const sibling = tmcs.find(
-      (t) => t.tmId === ctx.tmId && t.tmcType === node.materialization.assetType
-    )
+    const sibling = tmcs.find((t) => t.tmId === ctx.tmId && t.tmcType === node.materialization.assetType)
     if (!sibling) {
       return {
         ...base,
@@ -134,15 +137,9 @@ function evaluateContainer(node, ctx) {
     rawScore = strategies[node.strategy](normalized, node.strategyParams)
   }
 
-  let finalScore = rawScore
-  let correctionFired = null
-  for (const rule of node.correctionRules || []) {
-    const r = applyCorrectionRule(rule, finalScore, normalized)
-    if (r.fired) {
-      finalScore = r.value
-      correctionFired = rule
-    }
-  }
+  // Правила коррекции проверяются против ПОЛНОГО списка дочерних узлов
+  // (evaluatedChildren), включая исключённых из свёртки — стресс-тест, п.4.
+  const { finalScore, correctionFired } = applyAllCorrectionRules(node.correctionRules, rawScore, evaluatedChildren)
 
   const scaleKind = node.strategy === 'WEIGHTED_DEFICIT_INDEX' ? 'index' : normalized[0]?.scaleKind || 'ball'
 
@@ -163,19 +160,25 @@ export function evaluateNode(node, ctx) {
   return node.kind === 'leaf' ? evaluateLeaf(node, ctx) : evaluateContainer(node, ctx)
 }
 
-// Расчёт ИТС конкретной единицы оборудования по методике оборудования (шаблону).
-export function calculateEquipmentIts(template, tmcId) {
+// Расчёт ИТС конкретной единицы оборудования. library передаётся, чтобы
+// разрешить возможные узлы-ссылки на библиотеку перед расчётом — это
+// работает как для черновика (пробный расчёт), так и для уже
+// разрешённых опубликованных версий (разрешение там — no-op).
+export function calculateEquipmentIts(template, tmcId, library) {
   const tmc = tmcs.find((t) => t.id === tmcId)
   if (!tmc) throw new Error(`ТМЦ ${tmcId} не найдена`)
+  const resolvedTemplate = library ? resolveLibraryRefsDeep(template, library) : template
   const ctx = { targetTmcId: tmcId, tmId: tmc.tmId }
-  return evaluateNode(template, ctx)
+  return evaluateNode(resolvedTemplate, ctx)
 }
 
 // Расчёт ИТС Объекта: динамически находит оборудование заданного типа среди
 // ТМЦ, привязанных к ТМ этого объекта, считает их индивидуальный ИТС по
-// связанной методике оборудования (реестр methodologies), дальше сворачивает
-// тем же движком.
-export function calculateObjectIts(objectTemplate, objectId, tmsOfObject, methodologies) {
+// действующей версии связанной методики (реестр methodologies), дальше
+// сворачивает тем же движком. Экземпляры без значения показателя приведения
+// исключаются из свёртки WEIGHTED_BY_ATTRIBUTE, а не получают вес «1»
+// (стресс-тест, п.13).
+export function calculateObjectIts(objectTemplate, objectId, tmsOfObject, methodologies, library) {
   function resolveLinked(node) {
     return methodologies.find((m) => m.id === node.linkedMethodologyId) || null
   }
@@ -191,13 +194,11 @@ export function calculateObjectIts(objectTemplate, objectId, tmsOfObject, method
           status: 'undetermined',
           score: null,
           weight: node.weight,
-          note: 'Связанная методика не найдена (возможно, была удалена)',
+          note: 'Связанная методика не найдена (возможно, была архивирована и недоступна)',
           children: [],
         }
       }
-      const matchingTmcs = tmcs.filter(
-        (t) => tmsOfObject.includes(t.tmId) && t.tmcType === linked.assetType
-      )
+      const matchingTmcs = tmcs.filter((t) => tmsOfObject.includes(t.tmId) && t.tmcType === linked.assetType)
       if (matchingTmcs.length === 0) {
         return {
           id: node.id,
@@ -213,19 +214,32 @@ export function calculateObjectIts(objectTemplate, objectId, tmsOfObject, method
       const equipmentResults = matchingTmcs.map((t) => {
         const linkedVersion = getActiveVersion(linked)
         const linkedTemplate = linkedVersion ? linkedVersion.template : linked.draft
-        const result = calculateEquipmentIts(linkedTemplate, t.id)
+        const result = calculateEquipmentIts(linkedTemplate, t.id, library)
+        const attributeValue = getRatedPower(t.id)
         return {
           ...result,
           name: `${node.name}: ${t.name}`,
-          attributeValue: getRatedPower(t.id) ?? 1,
+          attributeValue,
+          attributeMissing: attributeValue == null,
           weight: 1,
         }
       })
+
       const active = equipmentResults.filter((c) => c.status === 'ok')
-      if (active.length === 0) {
-        return { id: node.id, name: node.name, kind: 'container', status: 'undetermined', score: null, children: equipmentResults }
+      const usable = node.strategy === 'WEIGHTED_BY_ATTRIBUTE' ? active.filter((c) => !c.attributeMissing) : active
+
+      if (usable.length === 0) {
+        return {
+          id: node.id,
+          name: node.name,
+          kind: 'container',
+          status: 'undetermined',
+          score: null,
+          children: equipmentResults,
+          note: active.length > usable.length ? 'Все найденные экземпляры исключены — отсутствует показатель приведения' : undefined,
+        }
       }
-      const score = strategies[node.strategy](active, node.strategyParams)
+      const score = strategies[node.strategy](usable, node.strategyParams)
       return {
         id: node.id,
         name: node.name,
@@ -234,11 +248,11 @@ export function calculateObjectIts(objectTemplate, objectId, tmsOfObject, method
         score,
         scaleKind: 'index',
         weight: node.weight,
+        renormalizedFrom: active.length !== usable.length ? active.length - usable.length : 0,
         children: equipmentResults,
       }
     }
 
-    // обычный контейнер верхнего уровня (например, звено-цепочка root)
     const evaluatedChildren = node.children.map(evalObjectNode)
     const active = evaluatedChildren.filter((c) => c.status === 'ok')
     if (active.length === 0) {
@@ -246,9 +260,21 @@ export function calculateObjectIts(objectTemplate, objectId, tmsOfObject, method
     }
     const totalWeight = sum(active.map((c) => c.weight ?? 1))
     const normalized = active.map((c) => ({ ...c, weight: totalWeight > 0 ? (c.weight ?? 1) / totalWeight : 1 / active.length }))
-    const score = strategies[node.strategy](normalized, node.strategyParams)
-    return { id: node.id, name: node.name, kind: 'container', status: 'ok', score, scaleKind: 'index', children: evaluatedChildren }
+    const rawScore = strategies[node.strategy](normalized, node.strategyParams)
+    const { finalScore, correctionFired } = applyAllCorrectionRules(node.correctionRules, rawScore, evaluatedChildren)
+    return {
+      id: node.id,
+      name: node.name,
+      kind: 'container',
+      status: 'ok',
+      score: finalScore,
+      rawScore,
+      correctionFired,
+      scaleKind: 'index',
+      children: evaluatedChildren,
+    }
   }
 
-  return evalObjectNode(objectTemplate)
+  const resolvedTemplate = library ? resolveLibraryRefsDeep(objectTemplate, library) : objectTemplate
+  return evalObjectNode(resolvedTemplate)
 }

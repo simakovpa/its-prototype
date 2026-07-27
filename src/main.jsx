@@ -13,8 +13,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         token: {
           colorPrimary: '#2f6f4f',
           borderRadius: 6,
-          fontFamily:
-            "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
         },
       }}
     >
