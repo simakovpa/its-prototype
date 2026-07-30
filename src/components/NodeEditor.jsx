@@ -54,6 +54,42 @@ export function NumericZonesEditor({ zones, onChange }) {
   )
 }
 
+export function DefectPresenceScaleEditor({ scale, onChange }) {
+  const map = scale?.map || []
+  const presentScore = map.find((m) => m.value === 'Имеется')?.score ?? 0
+  const absentScore = map.find((m) => m.value === 'Отсутствует')?.score ?? 4
+
+  const update = (presentVal, absentVal) => {
+    onChange({
+      kind: 'categorical',
+      map: [
+        { value: 'Отсутствует', score: absentVal },
+        { value: 'Имеется', score: presentVal },
+      ],
+    })
+  }
+
+  return (
+    <Space direction="vertical">
+      <Space size="large">
+        <div>
+          <Text type="secondary" style={{ display: 'block' }}>Если есть хотя бы один дефект из списка</Text>
+          <InputNumber min={0} max={4} value={presentScore} onChange={(v) => update(v, absentScore)} />
+        </div>
+        <div>
+          <Text type="secondary" style={{ display: 'block' }}>Если дефектов нет</Text>
+          <InputNumber min={0} max={4} value={absentScore} onChange={(v) => update(presentScore, v)} />
+        </div>
+      </Space>
+      <Text type="secondary">
+        Балл присваивается по самому факту наличия/отсутствия — без диапазонов. Разные параметры могут
+        по-разному оценивать один и тот же факт (например, для более значимого дефекта — «Имеется» → 0,
+        для менее значимого — «Имеется» → 2).
+      </Text>
+    </Space>
+  )
+}
+
 export function CategoricalMapEditor({ map, onChange }) {
   const update = (idx, patch) => {
     const next = map.slice()
@@ -232,7 +268,18 @@ export default function NodeEditor({ node, onChange, methodologies = [], library
           <>
             <Divider orientation="left" plain>Источник данных</Divider>
             <Form.Item label="Тип источника">
-              <Select style={{ width: 420 }} options={sourceTypeOptions} value={node.source?.type} onChange={(v) => patch({ source: { type: v } })} />
+              <Select
+                style={{ width: 420 }}
+                options={sourceTypeOptions}
+                value={node.source?.type}
+                onChange={(v) => {
+                  const patchObj = { source: { type: v } }
+                  if (v === 'defect' && !(node.scale?.kind === 'categorical' && node.scale.map?.some((m) => m.value === 'Имеется'))) {
+                    patchObj.scale = { kind: 'categorical', map: [{ value: 'Отсутствует', score: 4 }, { value: 'Имеется', score: 0 }] }
+                  }
+                  patch(patchObj)
+                }}
+              />
             </Form.Item>
 
             {node.source?.type === 'measured' && (
@@ -262,20 +309,26 @@ export default function NodeEditor({ node, onChange, methodologies = [], library
             </Form.Item>
 
             <Divider orientation="left" plain>Шкала оценки</Divider>
-            {library?.scales?.length > 0 && (
+            {library?.scales?.length > 0 && node.source?.type !== 'defect' && (
               <Form.Item label="Загрузить из библиотеки">
                 <Select style={{ width: 420 }} placeholder="Выбрать готовую шкалу…" options={library.scales.map((s) => ({ value: s.id, label: s.name }))} value={undefined}
                   onChange={(id) => { const found = library.scales.find((s) => s.id === id); if (found) patch({ scale: cloneScale(found.scale) }) }} />
               </Form.Item>
             )}
-            <Form.Item label="Тип шкалы">
-              <Select style={{ width: 420 }} options={scaleKindOptions} value={node.scale?.kind}
-                onChange={(v) => patch({ scale: v === 'numeric' ? { kind: 'numeric', zones: [{ score: 4 }] } : { kind: 'categorical', map: [{ value: '', score: 4 }] } })} />
-            </Form.Item>
-            {node.scale?.kind === 'numeric' ? (
-              <NumericZonesEditor zones={node.scale.zones || []} onChange={(zones) => patch({ scale: { ...node.scale, zones } })} />
+            {node.source?.type === 'defect' ? (
+              <DefectPresenceScaleEditor scale={node.scale} onChange={(scale) => patch({ scale })} />
             ) : (
-              <CategoricalMapEditor map={node.scale?.map || []} onChange={(map) => patch({ scale: { ...node.scale, map } })} />
+              <>
+                <Form.Item label="Тип шкалы">
+                  <Select style={{ width: 420 }} options={scaleKindOptions} value={node.scale?.kind}
+                    onChange={(v) => patch({ scale: v === 'numeric' ? { kind: 'numeric', zones: [{ score: 4 }] } : { kind: 'categorical', map: [{ value: '', score: 4 }] } })} />
+                </Form.Item>
+                {node.scale?.kind === 'numeric' ? (
+                  <NumericZonesEditor zones={node.scale.zones || []} onChange={(zones) => patch({ scale: { ...node.scale, zones } })} />
+                ) : (
+                  <CategoricalMapEditor map={node.scale?.map || []} onChange={(map) => patch({ scale: { ...node.scale, map } })} />
+                )}
+              </>
             )}
             {onSaveScaleToLibrary && (
               <Space style={{ marginTop: 12 }}>
