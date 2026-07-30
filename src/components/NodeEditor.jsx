@@ -57,13 +57,12 @@ export function NumericZonesEditor({ zones, onChange }) {
 export function DefectPresenceScaleEditor({ scale, onChange }) {
   const map = scale?.map || []
   const presentScore = map.find((m) => m.value === 'Имеется')?.score ?? 0
-  const absentScore = map.find((m) => m.value === 'Отсутствует')?.score ?? 4
 
-  const update = (presentVal, absentVal) => {
+  const update = (presentVal) => {
     onChange({
       kind: 'categorical',
       map: [
-        { value: 'Отсутствует', score: absentVal },
+        { value: 'Отсутствует', score: 4 },
         { value: 'Имеется', score: presentVal },
       ],
     })
@@ -71,20 +70,21 @@ export function DefectPresenceScaleEditor({ scale, onChange }) {
 
   return (
     <Space direction="vertical">
-      <Space size="large">
-        <div>
-          <Text type="secondary" style={{ display: 'block' }}>Если есть хотя бы один дефект из списка</Text>
-          <InputNumber min={0} max={4} value={presentScore} onChange={(v) => update(v, absentScore)} />
-        </div>
-        <div>
-          <Text type="secondary" style={{ display: 'block' }}>Если дефектов нет</Text>
-          <InputNumber min={0} max={4} value={absentScore} onChange={(v) => update(presentScore, v)} />
-        </div>
-      </Space>
+      <div>
+        <Text type="secondary" style={{ display: 'block' }}>
+          Балл, если есть хотя бы один дефект из списка «Учитываемые типы дефектов»
+        </Text>
+        <Select
+          style={{ width: 200 }}
+          value={presentScore}
+          onChange={update}
+          options={[0, 1, 2, 3, 4].map((v) => ({ value: v, label: `${v}` }))}
+        />
+      </div>
       <Text type="secondary">
-        Балл присваивается по самому факту наличия/отсутствия — без диапазонов. Разные параметры могут
-        по-разному оценивать один и тот же факт (например, для более значимого дефекта — «Имеется» → 0,
-        для менее значимого — «Имеется» → 2).
+        Если ни одного дефекта из списка нет — балл всегда 4 (наилучший). Настраивается только оценка на случай,
+        если дефект есть, — для разных параметров это может быть разная степень тяжести: 0, 1, 2, 3 или даже 4,
+        если дефект малозначим для данного узла.
       </Text>
     </Space>
   )
